@@ -1,0 +1,25 @@
+# ════════════════════════════════════════════════════
+# СТРАХОВКА: автоматически отключить фаервол через N минут
+# Запустите ЭТО ПЕРВЫМ, до включения фаервола
+# ════════════════════════════════════════════════════
+
+$ROLLBACK_MINUTES = 1  # время до отката
+
+$action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument `
+    "-NoProfile -ExecutionPolicy Bypass -Command `"Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False; Unregister-ScheduledTask -TaskName 'FW_ROLLBACK' -Confirm:`$false`""
+
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes($ROLLBACK_MINUTES)
+
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+
+Register-ScheduledTask `
+    -TaskName "FW_ROLLBACK" `
+    -Action $action `
+    -Trigger $trigger `
+    -Settings $settings `
+    -RunLevel Highest `
+    -Force
+
+Write-Host "⏱️  Откат запланирован через $ROLLBACK_MINUTES мин. в $(((Get-Date).AddMinutes($ROLLBACK_MINUTES)).ToString('HH:mm:ss'))" -ForegroundColor Yellow
+
+#end
