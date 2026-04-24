@@ -1,0 +1,76 @@
+# ════════════════════════════════════════════════════
+# ЗАМЕНИТЕ ПЕРЕД ЗАПУСКОМ:
+$MY_IP     = "192.168.0.1"        # ваш внешний IP
+$RDP_PORT  = 3389             # порт RDP (если нестандартный — измените)
+$MSSQL_PORT = 1433            # порт MSSQL
+$C1_PORT1  = 1541             # 1C агент сервера
+$C1_PORT2  = 1560             # 1C диапазон (1560-1591)
+# ════════════════════════════════════════════════════
+
+# 1. Включаем брандмауэр (все профили)
+Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+
+# 2. СНАЧАЛА — разрешаем RDP с нашего IP (страховка)
+New-NetFirewallRule `
+    -Name "SAFE_RDP_MY_IP" `
+    -DisplayName "SAFE - RDP from MY IP" `
+    -Direction Inbound `
+    -Protocol TCP `
+    -LocalPort $RDP_PORT `
+    -RemoteAddress $MY_IP `
+    -Action Allow `
+    -Profile Any `
+    -Enabled True
+
+# 3. Удаляем ВСЕ остальные правила
+Get-NetFirewallRule | Where-Object { $_.Name -ne "SAFE_RDP_MY_IP" } | Remove-NetFirewallRule
+
+# 4. Политика по умолчанию: всё запрещено входящее, исходящее разрешено
+Set-NetFirewallProfile -Profile Domain,Public,Private `
+    -DefaultInboundAction Block `
+    -DefaultOutboundAction Allow
+
+# 5. Добавляем нужные правила
+
+# RDP — только с вашего IP
+New-NetFirewallRule `
+    -Name "ALLOW_RDP" `
+    -DisplayName "Allow RDP from MY IP" `
+    -Direction Inbound -Protocol TCP `
+    -LocalPort $RDP_PORT `
+    -RemoteAddress $MY_IP `
+    -Action Allow -Profile Any -Enabled True
+
+# MSSQL — только с вашего IP (расширьте если нужен доступ 1С-клиентам)
+New-NetFirewallRule `
+    -Name "ALLOW_MSSQL" `
+    -DisplayName "Allow MSSQL from MY IP" `
+    -Direction Inbound -Protocol TCP `
+    -LocalPort $MSSQL_PORT `
+    -RemoteAddress $MY_IP `
+    -Action Allow -Profile Any -Enabled True
+
+# 1C Сервер приложений
+New-NetFirewallRule `
+    -Name "ALLOW_1C_AGENT" `
+    -DisplayName "Allow 1C Agent" `
+    -Direction Inbound -Protocol TCP `
+    -LocalPort $C1_PORT1 `
+    -RemoteAddress $MY_IP `
+    -Action Allow -Profile Any -Enabled True
+
+New-NetFirewallRule `
+    -Name "ALLOW_1C_RANGE" `
+    -DisplayName "Allow 1C Range 1560-1591" `
+    -Direction Inbound -Protocol TCP `
+    -LocalPort "1560-1591" `
+    -RemoteAddress $MY_IP `
+    -Action Allow -Profile Any -Enabled True
+
+# 6. Удаляем страховочное правило (дублируется ALLOW_RDP)
+Remove-NetFirewallRule -Name "SAFE_RDP_MY_IP"
+
+Write-Host "✅ Готово. Активные правила:" -ForegroundColor Green
+Get-NetFirewallRule | Where-Object {$_.Enabled -eq "True"} | Select-Object DisplayName, Direction, Action | Format-Table
+
+#end
